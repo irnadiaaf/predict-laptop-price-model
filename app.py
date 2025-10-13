@@ -1,3 +1,4 @@
+# app.py
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -27,19 +28,26 @@ company_options = [
     "Acer","Apple","Asus","Chuwi","Dell","Fujitsu","Google","HP","Huawei","LG",
     "Lenovo","Mediacom","Microsoft","MSI","Razer","Samsung","Toshiba","Vero","Xiaomi"
 ]
+
 cpu_company_options = ["AMD","Intel","Samsung"]
+
 cpu_type_options = [
     "AMD A-Series","AMD E-Series","Atom","Celeron","Core i3","Core i5","Core i7",
     "Pentium","Ryzen","Other"
 ]
+
 gpu_company_options = ["AMD","ARM","Intel","Nvidia"]
+
 storage_type_options = ["Flash","Flash+HDD","HDD","Hybrid","SSD","SSD+HDD","SSD+Hybrid"]
+
 memory_unit_options = ['MB','GB','TB']
+
 opsys_options = ['Mac','No OS','Windows','Linux/Other']
+
 resolution_options = ["4K","FullHD","HD","QHD","Other"]
 
 # -------------------------
-# GPU Performance mapping
+# GPU Performance mapping to tier (0 low, 1 mid, 2 high)
 # -------------------------
 def map_gpu_to_tier(gpu_name):
     s = str(gpu_name).lower()
@@ -52,28 +60,28 @@ def map_gpu_to_tier(gpu_name):
     return 1
 
 # -------------------------
-# UI
+# Build UI
 # -------------------------
-st.title("💻 Laptop Price Predictor")
-st.markdown("Masukkan spesifikasi laptop, lalu klik **Predict** untuk melihat estimasi harga.")
+st.title("Laptop Price Predictor (Streamlit Demo)")
+st.markdown("Masukkan spesifikasi laptop di form, kemudian klik **Predict**.")
 
 with st.form("input_form"):
-    st.header("Spesifikasi Laptop")
+    st.header("Spesifikasi Dasar")
     brand = st.selectbox("Brand (Company)", company_options)
     cpu_brand = st.selectbox("Brand CPU", cpu_company_options)
     cpu_type = st.selectbox("Tipe CPU", cpu_type_options)
-    cpu_freq = st.number_input("Frekuensi CPU (GHz)", min_value=0.0, max_value=5.0, value=2.5, step=0.1)
+    cpu_freq = st.number_input("Frekuensi CPU (GHz)", min_value=0.0, max_value=5.0, value=2.5, step=0.1, format="%.2f")
     gpu_brand = st.selectbox("Brand GPU", gpu_company_options)
     gpu_perf = st.text_input("GPU Performance", "GeForce GTX 1050")
     storage_type = st.selectbox("Tipe Storage", storage_type_options)
     memory_value = st.number_input("Memory (angka)", min_value=0.0, value=256.0)
     memory_unit = st.selectbox("Satuan Memory", memory_unit_options, index=1)
-    ram_gb = st.number_input("RAM (GB)", min_value=1, max_value=128, value=8)
+    ram_gb = st.number_input("RAM (GB)", min_value=1, max_value=128, value=8, step=1)
     opsys = st.selectbox("Sistem Operasi", opsys_options)
-    weight = st.number_input("Weight (kg)", min_value=0.0, max_value=9.0, value=2.0)
-    inches = st.number_input("Ukuran Layar (inci)", min_value=0.0, max_value=100.0, value=15.6)
-    resolution = st.selectbox("Resolusi", resolution_options)
-    ppi = st.number_input("PPI", min_value=0.0, max_value=1000.0, value=141.0)
+    weight = st.number_input("Weight (kg)", min_value=0.0, max_value=9.0, value=2.0, step=0.1, format="%.2f")
+    inches = st.number_input("Ukuran Inci", min_value=0.0, max_value=100.0, value=15.6, step=0.1, format="%.1f")
+    resolution = st.selectbox("Tipe resolusi", resolution_options)
+    ppi = st.number_input("PPI", min_value=0.0, max_value=1000.0, value=141.0, step=1.0)
     ips_choice = st.selectbox("IPS", ["Yes","No"], index=1)
     touchscreen_choice = st.selectbox("Touchscreen", ["Yes","No"], index=1)
 
@@ -86,21 +94,21 @@ if submitted:
     if model is None:
         st.stop()
 
-    # Konversi memory ke TB
+    # Memory convert
     if memory_unit == "TB":
-        mem_tb = memory_value
+        mem_tb = float(memory_value)
     elif memory_unit == "GB":
-        mem_tb = memory_value / 1024.0
+        mem_tb = float(memory_value) / 1024.0
     elif memory_unit == "MB":
-        mem_tb = memory_value / (1024.0**2)
+        mem_tb = float(memory_value) / (1024.0**2)
     else:
-        mem_tb = memory_value / 1024.0
+        mem_tb = float(memory_value) / 1024.0
 
     gpu_tier = map_gpu_to_tier(gpu_perf)
     ips = 1 if ips_choice == "Yes" else 0
     touchscreen = 1 if touchscreen_choice == "Yes" else 0
 
-    # Buat DataFrame
+    # Build dataframe
     data_input = pd.DataFrame({
         'Inches':[inches],
         'CPU_Frequency (GHz)':[cpu_freq],
@@ -120,30 +128,25 @@ if submitted:
         'OpsSys_Grouped':[opsys]
     })
 
-    # One-hot encode
+    # One-hot encode & reindex agar cocok dengan model training
     onehot_cols = ["Company","CPU_Company","CPU_Type","GPU_Company","Resolution_Type","Storage_Type","OpsSys_Grouped"]
     data_input = pd.get_dummies(data_input, columns=onehot_cols, drop_first=True)
 
-    # Load kolom model dan reindex
     try:
         model_columns = pickle.load(open('model_columns.pkl', 'rb'))
-
-        # Pastikan hanya kolom yang dikenal oleh model
         data_input = data_input.reindex(columns=model_columns, fill_value=0)
-        data_input = data_input.loc[:, model_columns]  # pastikan urutannya sama persis
-
     except Exception as e:
         st.error(f"Gagal memuat model_columns.pkl: {e}")
         st.stop()
 
-    st.subheader("Data Input (setelah preprocessing)")
-    st.dataframe(data_input.T.rename(columns={0: "Value"}))
+    st.subheader("Input Data (disesuaikan dengan kolom training)")
+    st.dataframe(data_input.T.rename(columns={0: "value"}))
 
     # Predict
     try:
         pred_log = model.predict(data_input)[0]
         pred_euro = np.expm1(pred_log)
-        st.success(f"💰 Estimasi Harga: € {pred_euro:,.2f}")
+        st.success(f"💰 Prediksi Harga: € {pred_euro:,.2f}")
         st.caption(f"(Prediksi log-price: {pred_log:.4f})")
     except Exception as e:
-        st.error(f"❌ Terjadi error saat prediksi:\n\n{e}")
+        st.exception(f"Error saat prediksi: {e}")
